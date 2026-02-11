@@ -1,0 +1,34 @@
+{
+  "name": "ppn-test2-settlement-orchestrator",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "clean": "rimraf dist cache artifacts",
+    "test": "pnpm test:contracts && pnpm test:unit && pnpm test:integration",
+    "test:contracts": "hardhat test",
+    "test:unit": "mocha -r ts-node/register/transpile-only tests/worker.spec.ts",
+    "test:integration": "mocha -r ts-node/register/transpile-only tests/integration.spec.ts",
+    "demo": "ts-node src/demo/runDemo.ts"
+  },
+  "dependencies": {
+    "@apollo/server": "^4.11.3",
+    "@openzeppelin/contracts": "^5.0.2",
+    "graphql": "^16.9.0",
+    "sql.js": "^1.13.0"
+  },
+  "devDependencies": {
+    "@nomicfoundation/hardhat-chai-matchers": "^2.0.9",
+    "@nomicfoundation/hardhat-ethers": "^3.0.8",
+    "@types/chai": "^4.3.16",
+    "@types/mocha": "^10.0.7",
+    "@types/node": "^22.8.7",
+    "chai": "^4.5.0",
+    "ethers": "^6.13.5",
+    "hardhat": "^2.22.18",
+    "mocha": "^10.7.3",
+    "rimraf": "^6.0.1",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.6.3"
+  }
+}

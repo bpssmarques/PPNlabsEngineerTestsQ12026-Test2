@@ -1,0 +1,68 @@
+name: ci
+
+on:
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  test-and-demo:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile=false
+
+      - name: Enforce forbidden changes
+        run: bash scripts/ci/forbid-changes.sh
+
+      - name: Contracts
+        run: pnpm test:contracts
+
+      - name: Unit
+        run: pnpm test:unit
+
+      - name: Integration
+        run: pnpm test:integration
+
+      - name: Demo
+        run: pnpm demo
+
+      - name: Job Summary
+        shell: bash
+        run: |
+          echo "## Created Request Mutation" >> "$GITHUB_STEP_SUMMARY"
+          echo '```graphql' >> "$GITHUB_STEP_SUMMARY"
+          echo 'mutation Create($to: String!, $amount: String!, $asset: String!) { createPayoutRequest(to: $to, amount: $amount, asset: $asset) { id requestId status } }' >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          echo "## Final Result JSON" >> "$GITHUB_STEP_SUMMARY"
+          if [ -f artifacts/demo.md ]; then
+            awk '/## Result/{f=1;next} f' artifacts/demo.md >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo '```json' >> "$GITHUB_STEP_SUMMARY"
+            echo '{"error":"missing artifacts/demo.md"}' >> "$GITHUB_STEP_SUMMARY"
+            echo '```' >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Upload deliverables
+        uses: actions/upload-artifact@v4
+        with:
+          name: ppn-deliverables
+          path: |
+            artifacts/demo.md
+            artifacts/schema.graphql
