@@ -1,13 +1,11 @@
+import {RiskChecker} from "../services/RiskChecker";
+import {PayoutRequest} from "../types/payout.types";
+import {RiskCheckResult} from "../types/risk.types";
 import riskConfig from "../../candidate-pack/risk.json";
-import {PayoutRequestRow} from "../db/repo";
 
-export interface RiskResult {
-  ok: boolean;
-  reason?: string;
-}
+export type RiskResult = RiskCheckResult;
 
-export function runRiskChecks(_row: PayoutRequestRow, _dailyTotal: bigint): RiskResult {
-  void riskConfig;
-  // TODO(candidate): enforce candidate-pack/risk.json policy.
-  return {ok: true};
+export function runRiskChecks(row: PayoutRequest, dailyTotal: bigint): RiskResult {
+  const checker = new RiskChecker(riskConfig);
+  return checker.check(row, dailyTotal);
 }

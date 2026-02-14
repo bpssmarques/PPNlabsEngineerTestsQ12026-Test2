@@ -1,54 +1,73 @@
 import {randomUUID} from "node:crypto";
-import {Database} from "sql.js";
+import {Database, SqlValue} from "sql.js";
+import {IPayoutRepository} from "../interfaces/IPayoutRepository";
+import {
+  PayoutRequest,
+  PayoutStatus,
+  CreatePayoutInput,
+  UpdateStatusPatch,
+  ListPayoutInput
+} from "../types/payout.types";
+import { DbPayoutRow } from "../interfaces/DbPayoutRow";
 
-export type PayoutStatus = "PENDING_RISK" | "APPROVED" | "REJECTED" | "SUBMITTED" | "CONFIRMED" | "FAILED";
-
-export interface PayoutRequestRow {
-  id: string;
-  requestId: string;
-  to: string;
-  asset: string;
-  amount: string;
-  status: PayoutStatus;
-  riskReason: string | null;
-  txHash: string | null;
-  submittedAt: number | null;
-  confirmedAt: number | null;
-  failedReason: string | null;
-  createdAt: number;
-  updatedAt: number;
-  lockOwner: string | null;
-  lockExpiresAt: number | null;
+interface RowMapper {
+  map(row: DbPayoutRow): PayoutRequest;
 }
 
-function mapRow(values: any[]): PayoutRequestRow {
-  return {
-    id: values[0],
-    requestId: values[1],
-    to: values[2],
-    asset: values[3],
-    amount: values[4],
-    status: values[5],
-    riskReason: values[6],
-    txHash: values[7],
-    submittedAt: values[8],
-    confirmedAt: values[9],
-    failedReason: values[10],
-    createdAt: values[11],
-    updatedAt: values[12],
-    lockOwner: values[13],
-    lockExpiresAt: values[14]
+class PayoutRowMapper implements RowMapper {
+  map(row: DbPayoutRow): PayoutRequest {
+    return {
+      id: row.id,
+      requestId: row.request_id,
+      to: row.to_address,
+      asset: row.asset,
+      amount: row.amount,
+      status: row.status,
+      riskReason: row.risk_reason,
+      txHash: row.tx_hash,
+      submittedAt: row.submitted_at,
+      confirmedAt: row.confirmed_at,
+      failedReason: row.failed_reason,
+      createdAt: row.created_at,
+      updatedAt: row.updated_at,
+      lockOwner: row.lock_owner,
+      lockExpiresAt: row.lock_expires_at
+    };
+  }
+}
+
+const mapper = new PayoutRowMapper();
+
+function mapRow(values: SqlValue[]): PayoutRequest {
+  const row: DbPayoutRow = {
+    id: values[0] as string,
+    request_id: values[1] as string,
+    to_address: values[2] as string,
+    asset: values[3] as string,
+    amount: values[4] as string,
+    status: values[5] as PayoutStatus,
+    risk_reason: values[6] as string | null,
+    tx_hash: values[7] as string | null,
+    submitted_at: values[8] as number | null,
+    confirmed_at: values[9] as number | null,
+    failed_reason: values[10] as string | null,
+    created_at: values[11] as number,
+    updated_at: values[12] as number,
+    lock_owner: values[13] as string | null,
+    lock_expires_at: values[14] as number | null
   };
+  return mapper.map(row);
 }
 
-export class PayoutRepo {
+export class PayoutRepo implements IPayoutRepository {
   constructor(private readonly db: Database) {}
 
-  create(input: {to: string; amount: string; asset: string; now: number}): PayoutRequestRow {
+  create(input: CreatePayoutInput): PayoutRequest {
     const id = randomUUID();
     const requestId = randomUUID().replace(/-/g, "");
     const status: PayoutStatus = "PENDING_RISK";
 
+    console.log(`[DB] Creating payout: id=${id}, requestId=${requestId}, to=${input.to}, amount=${input.amount}`);
     this.db.run(
       `INSERT INTO payout_requests (
         id, request_id, to_address, asset, amount, status,
@@ -60,7 +79,7 @@ export class PayoutRepo {
     return this.getById(id)!;
   }
 
-  getById(id: string): PayoutRequestRow | null {
+  getById(id: string): PayoutRequest | null {
     const stmt = this.db.prepare(
       `SELECT id, request_id, to_address, asset, amount, status, risk_reason, tx_hash,
       submitted_at, confirmed_at, failed_reason, created_at, updated_at, lock_owner, lock_expires_at
@@ -71,7 +90,8 @@ export class PayoutRepo {
       stmt.free();
       return null;
     }
-    const row = mapRow(stmt.get());
+    const values: SqlValue[] = stmt.get();
+    const row: PayoutRequest = mapRow(values);
     stmt.free();
     return row;
   }
@@ -80,11 +100,12 @@ export class PayoutRepo {
     id: string,
     status: PayoutStatus,
     now: number,
-    patch?: Partial<Pick<PayoutRequestRow, "riskReason" | "txHash" | "submittedAt" | "confirmedAt" | "failedReason">>
-  ): PayoutRequestRow | null {
+    patch?: UpdateStatusPatch
+  ): PayoutRequest | null {
     const current = this.getById(id);
     if (!current) return null;
 
+    console.log(`[DB] Updating ${id}: ${current.status} -> ${status}`);
     this.db.run(
       `UPDATE payout_requests
        SET status = ?, risk_reason = ?, tx_hash = ?, submitted_at = ?, confirmed_at = ?, failed_reason = ?, updated_at = ?
@@ -103,13 +124,17 @@ export class PayoutRepo {
     return this.getById(id);
   }
 
-  approve(id: string, now: number): PayoutRequestRow | null {
+  approve(id: string, now: number): PayoutRequest | null {
     const row = this.getById(id);
-    if (!row || row.status !== "PENDING_RISK") return null;
+    if (!row || row.status !== "PENDING_RISK") {
+      console.log(`[DB] Cannot approve ${id}: ${!row ? 'not found' : `status is ${row.status}`}`);
+      return null;
+    }
+    console.log(`[DB] Approving ${id}`);
     return this.updateStatus(id, "APPROVED", now);
   }
 
-  list(input: {status?: PayoutStatus; first: number; after?: string | null}): PayoutRequestRow[] {
+  list(input: ListPayoutInput): PayoutRequest[] {
     const first = Math.max(1, Math.min(100, input.first));
     const conditions: string[] = [];
     const params: any[] = [];
@@ -132,7 +157,7 @@ export class PayoutRepo {
     );
 
     stmt.bind([...params, first]);
-    const rows: PayoutRequestRow[] = [];
+    const rows: PayoutRequest[] = [];
     while (stmt.step()) {
       rows.push(mapRow(stmt.get()));
     }
@@ -140,10 +165,10 @@ export class PayoutRepo {
     return rows;
   }
 
-  claimApproved(now: number, owner: string, leaseMs: number): PayoutRequestRow | null {
+  claimApproved(now: number, owner: string, leaseMs: number): PayoutRequest | null {
     const stmt = this.db.prepare(
       `SELECT id FROM payout_requests
-       WHERE status = 'APPROVED'
+       WHERE status IN ('APPROVED', 'SUBMITTED')
        AND (lock_expires_at IS NULL OR lock_expires_at < ?)
        ORDER BY created_at ASC LIMIT 1`
     );
@@ -155,6 +180,7 @@ export class PayoutRepo {
     const id = String(stmt.get()[0]);
     stmt.free();
 
+    console.log(`[DB] Claiming ${id} for owner=${owner}, lease=${leaseMs}ms`);
     this.db.run(`UPDATE payout_requests SET lock_owner = ?, lock_expires_at = ?, updated_at = ? WHERE id = ?`, [
       owner,
       now + leaseMs,
@@ -162,5 +188,24 @@ export class PayoutRepo {
       id
     ]);
     return this.getById(id);
+  }
+
+  getDailyTotal(now: number): bigint {
+    const startOfDayUTC = Math.floor(now / 86400000) * 86400000;
+    const stmt = this.db.prepare(
+      `SELECT COALESCE(SUM(CAST(amount AS INTEGER)), 0) as total
+       FROM payout_requests
+       WHERE status IN ('SUBMITTED', 'CONFIRMED')
+       AND created_at >= ?`
+    );
+    stmt.bind([startOfDayUTC]);
+    if (!stmt.step()) {
+      stmt.free();
+      return 0n;
+    }
+    const total = stmt.get()[0] as number;
+    stmt.free();
+    console.log(`[DB] Daily total: ${total}`);
+    return BigInt(total);
   }
 }
