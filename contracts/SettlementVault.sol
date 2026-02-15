@@ -3,9 +3,12 @@ pragma solidity ^0.8.24;
 
 import {AccessControl} from "@openzeppelin/contracts/access/AccessControl.sol";
 import {Pausable} from "@openzeppelin/contracts/utils/Pausable.sol";
+import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 
 contract SettlementVault is AccessControl, Pausable {
+    using SafeERC20 for IERC20;
+
     bytes32 public constant ADMIN_ROLE = keccak256("ADMIN_ROLE");
     bytes32 public constant OPERATOR_ROLE = keccak256("OPERATOR_ROLE");
 
@@ -42,12 +45,15 @@ contract SettlementVault is AccessControl, Pausable {
     function payout(address to, uint256 amount, bytes32 requestId) external onlyRole(OPERATOR_ROLE) whenNotPaused {
         require(to != address(0), "to=0");
         require(amount > 0, "amount=0");
+        // Replay protection: each requestId can only be executed once
+        // Alternative considered: nonce-based replay protection (nonce per operator)
+        // Rejected because: requestId is already unique per request, simpler to track in DB,
+        // and allows off-chain worker to safely retry without worrying about nonce management
         require(!requestExecuted[requestId], "already-executed");
 
-        // INTENTIONAL BUG: replay protection flag not persisted.
-        // requestExecuted[requestId] = true;
+        asset.safeTransfer(to, amount);
 
-        require(asset.transfer(to, amount), "transfer-failed");
+        requestExecuted[requestId] = true;
         emit PayoutExecuted(requestId, msg.sender, to, amount);
     }
 }
