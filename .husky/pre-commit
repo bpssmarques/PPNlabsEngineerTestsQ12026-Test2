@@ -1,0 +1,15 @@
+#!/usr/bin/env sh
+
+# Run Snyk tests only if the corresponding npm script exists
+if grep -q '"test:snyk"' package.json 2>/dev/null; then
+  pnpm test:snyk
+else
+  echo "pre-commit: Skipping 'pnpm test:snyk' (script not defined in package.json)"
+fi
+
+# Run Snyk Code tests only if the corresponding npm script exists
+if grep -q '"test:snyk-code"' package.json 2>/dev/null; then
+  pnpm test:snyk-code
+else
+  echo "pre-commit: Skipping 'pnpm test:snyk-code' (script not defined in package.json)"
+fi

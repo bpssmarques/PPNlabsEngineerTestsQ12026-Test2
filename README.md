@@ -27,6 +27,21 @@ pnpm test
 - `pnpm test:unit`
 - `pnpm test:integration`
 - `pnpm demo`
+- `pnpm worker:seed:demo`
+- `pnpm worker:tick:onchain`
+
+## On-chain worker tick (optional)
+
+Set these environment variables before running:
+
+- `CHAIN_RPC_URL`
+- `VAULT_ADDRESS`
+- `OPERATOR_PRIVATE_KEY`
+
+Optional:
+
+- `WORKER_ID` (default: `worker-local`)
+- `WORKER_LEASE_MS` (default: `60000`)
 
 ## Important
 

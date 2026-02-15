@@ -1,7 +1,10 @@
-import {mkdir, writeFile} from "node:fs/promises";
+import { mkdir, writeFile } from "node:fs/promises";
 import risk from "../../candidate-pack/risk.json";
-import {typeDefs} from "../api/schema";
-import {createServer} from "../api/server";
+import { typeDefs } from "../api/schema";
+import { createServer } from "../api/server";
+import { createLogger } from "../shared/logger";
+
+const logger = createLogger("runDemo");
 
 async function main() {
   const server = createServer();
@@ -20,10 +23,10 @@ async function main() {
     asset: risk.demo.asset
   };
 
-  const response = await server.executeOperation({query: mutation, variables});
-  const result = response.body.kind === "single" ? response.body.singleResult : {errors: [{message: "unexpected multipart"}]};
+  const response = await server.executeOperation({ query: mutation, variables });
+  const result = response.body.kind === "single" ? response.body.singleResult : { errors: [{ message: "unexpected multipart" }] };
 
-  await mkdir("artifacts", {recursive: true});
+  await mkdir("artifacts", { recursive: true });
   await writeFile("artifacts/schema.graphql", `${typeDefs.trim()}\n`, "utf8");
 
   const markdown = [
@@ -52,6 +55,6 @@ async function main() {
 }
 
 main().catch((err) => {
-  console.error(err);
+  logger.error("demo-run-failed", { error: err });
   process.exitCode = 1;
 });

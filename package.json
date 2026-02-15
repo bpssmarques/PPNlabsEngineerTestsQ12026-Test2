@@ -5,11 +5,14 @@
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "clean": "rimraf dist cache artifacts",
-    "test": "pnpm test:contracts && pnpm test:unit && pnpm test:integration",
+    "test": "pnpm test:contracts && pnpm test:unit && pnpm test:integration && pnpm test:additional",
     "test:contracts": "hardhat test",
-    "test:unit": "mocha -r ts-node/register/transpile-only tests/worker.spec.ts",
-    "test:integration": "mocha -r ts-node/register/transpile-only tests/integration.spec.ts",
-    "demo": "ts-node src/demo/runDemo.ts"
+    "test:unit": "NODE_NO_WARNINGS=1 mocha -r ts-node/register/transpile-only tests/worker.spec.ts",
+    "test:integration": "NODE_NO_WARNINGS=1 mocha -r ts-node/register/transpile-only tests/integration.spec.ts",
+    "test:additional": "NODE_NO_WARNINGS=1 mocha -r ts-node/register/transpile-only \"tests/additional/**/*.spec.ts\"",
+    "demo": "ts-node src/demo/runDemo.ts",
+    "worker:seed:demo": "ts-node src/worker/seedDemoRequest.ts",
+    "worker:tick:onchain": "ts-node src/worker/runWorkerTick.ts"
   },
   "dependencies": {
     "@apollo/server": "^4.11.3",
@@ -30,5 +33,6 @@
     "rimraf": "^6.0.1",
     "ts-node": "^10.9.2",
     "typescript": "^5.6.3"
-  }
+  },
+  "packageManager": "pnpm@8.15.8"
 }
