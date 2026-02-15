@@ -19,6 +19,7 @@ export const typeDefs = /* GraphQL */ `
     txHash: String
     submittedAt: String
     confirmedAt: String
+    failedReason: String
     createdAt: String!
     updatedAt: String!
   }
@@ -40,9 +41,12 @@ export const typeDefs = /* GraphQL */ `
 
   type Query {
     health: String!
+    payoutRequest(id: ID!): PayoutRequest
+    payoutRequests(status: PayoutStatus, first: Int!, after: String): PayoutRequestConnection!
   }
 
   type Mutation {
-    noop: String!
+    createPayoutRequest(to: String!, amount: String!, asset: String!): PayoutRequest!
+    approvePayoutRequest(id: ID!): PayoutRequest!
   }
 `;
