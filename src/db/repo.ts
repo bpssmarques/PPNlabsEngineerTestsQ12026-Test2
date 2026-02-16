@@ -163,4 +163,47 @@ export class PayoutRepo {
     ]);
     return this.getById(id);
   }
+
+  claimSubmitted(now: number, owner: string, leaseMs: number): PayoutRequestRow | null {
+    const stmt = this.db.prepare(
+      `SELECT id FROM payout_requests
+       WHERE status = 'SUBMITTED'
+       AND (lock_expires_at IS NULL OR lock_expires_at < ?)
+       ORDER BY submitted_at ASC LIMIT 1`
+    );
+    stmt.bind([now]);
+    if (!stmt.step()) {
+      stmt.free();
+      return null;
+    }
+    const id = String(stmt.get()[0]);
+    stmt.free();
+
+    this.db.run(`UPDATE payout_requests SET lock_owner = ?, lock_expires_at = ?, updated_at = ? WHERE id = ?`, [
+      owner,
+      now + leaseMs,
+      now,
+      id
+    ]);
+    return this.getById(id);
+  }
+
+  getDailyTotal(now: number): bigint {
+    const daySeconds = 86400;
+    const dayStart = now - (now % daySeconds);
+    const dayEnd = dayStart + daySeconds;
+
+    const stmt = this.db.prepare(
+      `SELECT amount FROM payout_requests
+       WHERE status IN ('SUBMITTED', 'CONFIRMED')
+       AND submitted_at >= ? AND submitted_at < ?`
+    );
+    stmt.bind([dayStart, dayEnd]);
+    let total = 0n;
+    while (stmt.step()) {
+      total += BigInt(stmt.get()[0] as string);
+    }
+    stmt.free();
+    return total;
+  }
 }

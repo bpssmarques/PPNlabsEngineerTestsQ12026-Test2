@@ -1,5 +1,6 @@
 import {expect} from "chai";
 import {ethers} from "hardhat";
+import {SettlementVaultContract} from "./additional/SettlementVault.additional.spec";
 
 describe("SettlementVault", function () {
   it("prevents replay by requestId", async function () {
@@ -10,7 +11,7 @@ describe("SettlementVault", function () {
     await token.waitForDeployment();
 
     const vaultFactory = await ethers.getContractFactory("SettlementVault", admin);
-    const vault = await vaultFactory.deploy(await token.getAddress(), admin.address);
+    const vault = await (vaultFactory.deploy(await token.getAddress(), admin.address)) as unknown as SettlementVaultContract;
     await vault.waitForDeployment();
 
     await token.mint(await vault.getAddress(), 10_000n);
@@ -32,7 +33,7 @@ describe("SettlementVault", function () {
     await token.waitForDeployment();
 
     const vaultFactory = await ethers.getContractFactory("SettlementVault", admin);
-    const vault = await vaultFactory.deploy(await token.getAddress(), admin.address);
+    const vault = await (vaultFactory.deploy(await token.getAddress(), admin.address)) as unknown as SettlementVaultContract;
     await vault.waitForDeployment();
 
     await token.mint(await vault.getAddress(), 10_000n);
