@@ -6,8 +6,31 @@ export interface RiskResult {
   reason?: string;
 }
 
-export function runRiskChecks(_row: PayoutRequestRow, _dailyTotal: bigint): RiskResult {
-  void riskConfig;
-  // TODO(candidate): enforce candidate-pack/risk.json policy.
+export function runRiskChecks(row: PayoutRequestRow, dailyTotal: bigint): RiskResult {
+  const amount = BigInt(row.amount);
+
+  // Check denylist
+  const normalizedTo = row.to.toLowerCase();
+  for (const denied of riskConfig.denylist) {
+    if (denied.toLowerCase() === normalizedTo) {
+      return {ok: false, reason: `recipient ${row.to} is denylisted`};
+    }
+  }
+
+  // Check per-request limit
+  const maxPerRequest = BigInt(riskConfig.maxPerRequest);
+  if (amount > maxPerRequest) {
+    return {ok: false, reason: `amount ${row.amount} exceeds maxPerRequest ${riskConfig.maxPerRequest}`};
+  }
+
+  // Check daily total limit (existing daily total + this request)
+  const maxDailyTotal = BigInt(riskConfig.maxDailyTotal);
+  if (dailyTotal + amount > maxDailyTotal) {
+    return {
+      ok: false,
+      reason: `daily total would be ${(dailyTotal + amount).toString()} exceeding maxDailyTotal ${riskConfig.maxDailyTotal}`,
+    };
+  }
+
   return {ok: true};
 }

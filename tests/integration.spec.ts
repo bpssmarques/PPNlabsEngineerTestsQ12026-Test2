@@ -1,9 +1,11 @@
 import {expect} from "chai";
 import {createServer} from "../src/api/server";
+import {createDb} from "../src/db/db";
 
 describe("GraphQL integration", function () {
   it("creates and approves a payout request", async function () {
-    const server = createServer();
+    const database = await createDb();
+    const server = createServer(database);
 
     const createResponse = await server.executeOperation({
       query: `

@@ -2,9 +2,11 @@ import {mkdir, writeFile} from "node:fs/promises";
 import risk from "../../candidate-pack/risk.json";
 import {typeDefs} from "../api/schema";
 import {createServer} from "../api/server";
+import {createDb} from "../db/db";
 
 async function main() {
-  const server = createServer();
+  const database = await createDb();
+  const server = createServer(database);
   const mutation = `
     mutation Create($to: String!, $amount: String!, $asset: String!) {
       createPayoutRequest(to: $to, amount: $amount, asset: $asset) {
