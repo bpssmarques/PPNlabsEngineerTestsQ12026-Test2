@@ -4,8 +4,11 @@ pragma solidity ^0.8.24;
 import {AccessControl} from "@openzeppelin/contracts/access/AccessControl.sol";
 import {Pausable} from "@openzeppelin/contracts/utils/Pausable.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
+import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 
-contract SettlementVault is AccessControl, Pausable {
+contract SettlementVault is AccessControl, Pausable, ReentrancyGuard {
+    using SafeERC20 for IERC20;
     bytes32 public constant ADMIN_ROLE = keccak256("ADMIN_ROLE");
     bytes32 public constant OPERATOR_ROLE = keccak256("OPERATOR_ROLE");
 
@@ -39,15 +42,14 @@ contract SettlementVault is AccessControl, Pausable {
         _unpause();
     }
 
-    function payout(address to, uint256 amount, bytes32 requestId) external onlyRole(OPERATOR_ROLE) whenNotPaused {
+    function payout(address to, uint256 amount, bytes32 requestId) external onlyRole(OPERATOR_ROLE) whenNotPaused nonReentrant {
         require(to != address(0), "to=0");
         require(amount > 0, "amount=0");
         require(!requestExecuted[requestId], "already-executed");
 
-        // INTENTIONAL BUG: replay protection flag not persisted.
-        // requestExecuted[requestId] = true;
+        requestExecuted[requestId] = true;
 
-        require(asset.transfer(to, amount), "transfer-failed");
+        asset.safeTransfer(to, amount);
         emit PayoutExecuted(requestId, msg.sender, to, amount);
     }
 }
