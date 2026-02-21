@@ -3,6 +3,15 @@ import {Database} from "sql.js";
 
 export type PayoutStatus = "PENDING_RISK" | "APPROVED" | "REJECTED" | "SUBMITTED" | "CONFIRMED" | "FAILED";
 
+const ALLOWED_TRANSITIONS: Record<PayoutStatus, PayoutStatus[]> = {
+  PENDING_RISK: ["APPROVED", "REJECTED"],
+  APPROVED: ["SUBMITTED", "REJECTED"],
+  REJECTED: [],
+  SUBMITTED: ["CONFIRMED", "FAILED"],
+  CONFIRMED: [],
+  FAILED: []
+};
+
 export interface PayoutRequestRow {
   id: string;
   requestId: string;
@@ -85,6 +94,9 @@ export class PayoutRepo {
     const current = this.getById(id);
     if (!current) return null;
 
+    const allowed = ALLOWED_TRANSITIONS[current.status];
+    if (!allowed?.includes(status)) return null;
+
     this.db.run(
       `UPDATE payout_requests
        SET status = ?, risk_reason = ?, tx_hash = ?, submitted_at = ?, confirmed_at = ?, failed_reason = ?, updated_at = ?
@@ -140,27 +152,58 @@ export class PayoutRepo {
     return rows;
   }
 
-  claimApproved(now: number, owner: string, leaseMs: number): PayoutRequestRow | null {
+  /** Sum of amount for CONFIRMED/SUBMITTED requests on the given UTC date (YYYY-MM-DD). Uses submitted_at for the day. */
+  getDailyTotalForUtcDate(isoDate: string): bigint {
     const stmt = this.db.prepare(
-      `SELECT id FROM payout_requests
-       WHERE status = 'APPROVED'
-       AND (lock_expires_at IS NULL OR lock_expires_at < ?)
-       ORDER BY created_at ASC LIMIT 1`
+      `SELECT amount FROM payout_requests
+       WHERE status IN ('CONFIRMED', 'SUBMITTED')
+       AND submitted_at IS NOT NULL
+       AND date(submitted_at, 'unixepoch') = ?`
     );
-    stmt.bind([now]);
-    if (!stmt.step()) {
-      stmt.free();
-      return null;
+    stmt.bind([isoDate]);
+    let total = 0n;
+    while (stmt.step()) {
+      const amount = String(stmt.get()[0]);
+      total += BigInt(amount);
     }
-    const id = String(stmt.get()[0]);
     stmt.free();
+    return total;
+  }
 
-    this.db.run(`UPDATE payout_requests SET lock_owner = ?, lock_expires_at = ?, updated_at = ? WHERE id = ?`, [
-      owner,
-      now + leaseMs,
-      now,
-      id
-    ]);
-    return this.getById(id);
+  /** Atomically claim one APPROVED request (transactional). Returns the claimed row or null. */
+  claimOneApproved(now: number, owner: string, leaseMs: number): PayoutRequestRow | null {
+    this.db.run("BEGIN");
+    try {
+      const stmt = this.db.prepare(
+        `SELECT id FROM payout_requests
+         WHERE status = 'APPROVED'
+         AND (lock_expires_at IS NULL OR lock_expires_at < ?)
+         ORDER BY created_at ASC LIMIT 1`
+      );
+      stmt.bind([now]);
+      if (!stmt.step()) {
+        stmt.free();
+        this.db.run("ROLLBACK");
+        return null;
+      }
+      const id = String(stmt.get()[0]);
+      stmt.free();
+
+      this.db.run(`UPDATE payout_requests SET lock_owner = ?, lock_expires_at = ?, updated_at = ? WHERE id = ?`, [
+        owner,
+        now + leaseMs,
+        now,
+        id
+      ]);
+      this.db.run("COMMIT");
+      return this.getById(id);
+    } catch (e) {
+      this.db.run("ROLLBACK");
+      throw e;
+    }
+  }
+
+  claimApproved(now: number, owner: string, leaseMs: number): PayoutRequestRow | null {
+    return this.claimOneApproved(now, owner, leaseMs);
   }
 }
